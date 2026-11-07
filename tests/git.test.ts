@@ -67,4 +67,16 @@ describe('git helpers', () => {
     expect(fs.existsSync(path.join(dir, 'one.txt'))).toBe(false);
     expect(await revertLast(dir)).toBeNull();
   });
+
+  it('revertLast aborts a conflicting revert and leaves the repo clean', async () => {
+    const { dir } = makeRepo();
+    fs.writeFileSync(path.join(dir, 'f.txt'), 'one\n');
+    await commitAll(dir, 'client-auto: one');
+    fs.writeFileSync(path.join(dir, 'f.txt'), 'two\n');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-m', 'edit later');
+    await expect(revertLast(dir)).rejects.toThrow();
+    expect(await isClean(dir)).toBe(true);
+    expect(fs.existsSync(path.join(dir, '.git', 'REVERT_HEAD'))).toBe(false);
+  });
 });

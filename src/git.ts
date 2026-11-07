@@ -5,7 +5,12 @@ const exec = promisify(execFile);
 const EXCLUDE = ':(exclude).client-auto';
 
 async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await exec('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 });
+  const { stdout } = await exec('git', args, {
+    cwd,
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: 120_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  });
   return stdout;
 }
 
@@ -20,6 +25,7 @@ export async function ensureBranch(cwd: string, branch: string | null): Promise<
   try { await git(cwd, ['checkout', branch]); } catch { await git(cwd, ['checkout', '-b', branch]); }
 }
 
+// Only call after isClean() was true before the agent ran (runs reset --hard and clean -fd).
 export async function discardChanges(cwd: string): Promise<void> {
   await git(cwd, ['reset', '--hard', 'HEAD']);
   await git(cwd, ['clean', '-fd', '-e', '.client-auto']);
@@ -49,6 +55,11 @@ export async function revertLast(cwd: string): Promise<string | null> {
   });
   if (!hit) return null;
   const sha = hit.split('\t')[0];
-  await git(cwd, ['revert', '--no-edit', sha]);
+  try {
+    await git(cwd, ['revert', '--no-edit', sha]);
+  } catch (err) {
+    await git(cwd, ['revert', '--abort']).catch(() => {});
+    throw err;
+  }
   return sha;
 }
