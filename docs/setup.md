@@ -3,6 +3,7 @@
 ## Before you start
 - **Use a dedicated phone number that is registered on the WhatsApp Cloud API.** Do not use a number that is on the regular WhatsApp or WhatsApp Business app. Running the Business app and the Cloud API on one number (coexistence) is not assumed to be available to solo developers.
 - **Cloudflare with a domain.** A stable Cloudflare Tunnel hostname needs a domain on your Cloudflare account. Quick tunnels give random URLs that change on every run and break the Meta webhook.
+- **A git identity in each project.** Set `git config user.name` and `git config user.email` (locally or globally) in every project you connect, and make sure `git push` works there. Commits and pushes fail without them.
 - **The computer must stay on.** `client-auto start` must be running for messages to be processed.
 
 ## 1. Meta (WhatsApp Business Cloud API)
@@ -52,6 +53,8 @@ Keep it running. In a project chat, run the `connect-client` skill.
 
 ## Missed messages
 Meta retries webhooks that do not get an HTTP 200 response, but only for a limited time (reported as up to 7 days; check Meta's webhook documentation for the current figure). If the computer is off or the tunnel is down for longer than that, messages can be lost. Keep the machine awake and the tunnel running.
+
+Messages are also held in memory for a short time before they are processed (a 30 second batching window, plus any wait behind a running job). If `client-auto start` stops in that time, those messages are lost: Meta already got a 200 response and will not retry them. Ask the client to resend after a restart.
 
 ## Try it safely
 `client-auto connect <folder> <number> --dry-run` classifies and logs messages without editing or pushing.

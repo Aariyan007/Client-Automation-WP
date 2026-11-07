@@ -16,7 +16,7 @@ Messages that are not website requests are ignored. The plugin is released publi
 
 | Topic | Decision |
 |---|---|
-| WhatsApp connection | Official WhatsApp Business Cloud API (no unofficial libraries, no ban risk) |
+| WhatsApp connection | Official WhatsApp Business Cloud API (official API only, no unofficial libraries) |
 | Receiving messages | Meta webhook, exposed to the user's machine with Cloudflare Tunnel |
 | Replies to the client | None. The plugin is silent toward the client |
 | Output of a job | Commit and push to GitHub. The user deploys themselves |
@@ -63,8 +63,14 @@ Messages that are not website requests are ignored. The plugin is released publi
 
 ### 4.1 Permissions
 The worker may edit files inside the project folder and run git. It may not read `.env` or
-other secrets, run deploy commands, or touch anything outside the folder. Enforced through a
-generated permission/settings file for the headless run.
+other secrets, run deploy commands, or touch anything outside the folder. Enforced with the
+Claude CLI tool allow/deny flags passed on the headless run (not a generated settings file).
+This is a restricted tool list, not an operating-system sandbox. Installs run with `--ignore-scripts`.
+
+After the agent finishes and before checks run, the worker compares the changes with HEAD. If the
+agent touched `.github/`, `.husky/`, any `.npmrc`, or changed the `scripts` field of `package.json`,
+the changes are discarded, nothing is pushed, the refusal is logged as a protected path change and
+the user is notified.
 
 ### 4.2 Client text is data
 Messages are never executed as instructions beyond "make this website change". Requests such as

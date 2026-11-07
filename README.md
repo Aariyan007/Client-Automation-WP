@@ -34,6 +34,10 @@ Then in Claude Code add this repository as a plugin marketplace and install `cli
 - **Do not edit the project folder while a client job is running.** The tool may discard or publish those edits. Jobs are skipped when you have uncommitted changes at the start.
 - **Keep build output out of git.** Put `dist/`, `.next/` and similar folders in the project's `.gitignore`. Otherwise a successful build may be committed.
 - **The editing agent is not a sandbox.** It runs with a restricted tool list, but that is not an operating-system sandbox. Run it on a machine or account you trust.
+- **Some files are off limits to the editing agent.** It cannot change `.github/`, `.husky/`, `.npmrc` or the `scripts` field of `package.json`. If it does anyway, the change is discarded, nothing is pushed and you are notified. Installs use `--ignore-scripts`. This is still not an operating-system sandbox.
+- **Messages can be lost on restart.** Messages received during the 30 second batching window, or queued behind a running job, are held in memory and are lost if `client-auto start` stops. Meta already got a 200 response, so it will not retry them.
+- **`--branch` moves your checkout.** With `--branch`, the tool switches your checkout to that branch and leaves it there.
+- **Git identity required.** `user.name` and `user.email` must be configured in each connected project, or commits fail.
 - **Text messages only in v1.** Images, voice notes and documents are ignored.
 - macOS and Linux. One WhatsApp business number per listener.
 - Your computer must be on and `client-auto start` running. Messages sent while it is off may be lost (see [docs/setup.md](docs/setup.md)).

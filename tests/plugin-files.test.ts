@@ -41,6 +41,39 @@ describe('plugin files', () => {
     expect(readme).toMatch(/sandbox/i);
     expect(readme).toMatch(/text messages only/i);
   });
+  it('README Known limits cover restart loss, --branch, protected paths, --ignore-scripts and git identity', () => {
+    const readme = fs.readFileSync('README.md', 'utf8');
+    const limits = readme.slice(readme.indexOf('Known limits'));
+    expect(limits).toMatch(/lost/i);
+    expect(limits).toMatch(/--ignore-scripts/);
+    expect(limits).toMatch(/--branch/);
+    expect(limits).toMatch(/\.github\//);
+    expect(limits).toMatch(/\.husky\//);
+    expect(limits).toMatch(/\.npmrc/);
+    expect(limits).toMatch(/user\.name/);
+    expect(limits).toMatch(/user\.email/);
+  });
+  it('setup guide requires a git identity and mentions the restart message-loss limit', () => {
+    const setup = fs.readFileSync('docs/setup.md', 'utf8');
+    expect(setup).toMatch(/git.*(identity|user\.name)/i);
+    expect(setup).toMatch(/user\.email/);
+    expect(setup).toMatch(/lost/i);
+  });
+  it('no doc claims "no ban risk"', () => {
+    for (const f of [
+      'README.md', 'docs/setup.md',
+      'docs/superpowers/specs/2026-11-07-client-auto-whatsapp-plugin-design.md',
+      'docs/superpowers/plans/2026-11-07-client-auto-whatsapp-plugin.md',
+    ]) {
+      expect(fs.readFileSync(f, 'utf8')).not.toMatch(/no ban risk/i);
+    }
+  });
+  it('design spec describes tool allow/deny flags and the protected-path refusal', () => {
+    const spec = fs.readFileSync('docs/superpowers/specs/2026-11-07-client-auto-whatsapp-plugin-design.md', 'utf8');
+    expect(spec).not.toMatch(/generated permission\/settings file/);
+    expect(spec).toMatch(/allow\/deny/i);
+    expect(spec).toMatch(/protected path/i);
+  });
   it('README makes no ban-risk claim and gives a real install route', () => {
     const readme = fs.readFileSync('README.md', 'utf8');
     expect(readme).not.toMatch(/no ban risk/i);
