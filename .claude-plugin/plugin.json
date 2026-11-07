@@ -1,0 +1,6 @@
+{
+  "name": "client-auto",
+  "version": "0.1.0",
+  "description": "Bind a project to a client's WhatsApp number. Claude fixes their website change requests and pushes to GitHub.",
+  "license": "MIT"
+}

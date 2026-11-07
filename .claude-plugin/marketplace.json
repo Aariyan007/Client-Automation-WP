@@ -1,0 +1,7 @@
+{
+  "name": "client-auto-marketplace",
+  "owner": { "name": "client-auto contributors" },
+  "plugins": [
+    { "name": "client-auto", "source": "./", "description": "WhatsApp-to-Claude change requests for client websites." }
+  ]
+}

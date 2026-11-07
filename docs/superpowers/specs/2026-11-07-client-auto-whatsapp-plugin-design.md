@@ -92,8 +92,8 @@ the failure is logged and the user is notified.
 
 ## 7. Requirements for users
 - Node 20+, Claude Code signed in, push access to the project's git remote.
-- A Meta developer app and a WhatsApp Business phone number on the Cloud API.
-- A Cloudflare account and a stable tunnel URL (see open items).
+- A Meta developer app and a dedicated phone number registered on the WhatsApp Cloud API (coexistence with the Business app is not assumed).
+- A Cloudflare account with a domain, so the tunnel has a stable hostname.
 - The computer must be on and the listener running. Meta retries failed webhooks for a limited
   time, so long downtime can lose messages.
 
