@@ -88,7 +88,12 @@ export function statusText(folder: string): string {
   ];
   let recent = '';
   try {
-    recent = fs.readFileSync(logFile(abs), 'utf8').trim().split('\n').slice(-10).join('\n');
+    // Client message lines ("  > ...") are third-party text; never echo them into the owner's Claude session.
+    recent = fs.readFileSync(logFile(abs), 'utf8').split('\n')
+      .filter((l) => l.trim() !== '' && !l.startsWith('  >'))
+      .slice(-10)
+      .map((l) => Array.from(l).slice(0, 200).join(''))
+      .join('\n');
   } catch { /* no log yet */ }
   return recent ? `${lines.join('\n')}\n\nrecent activity:\n${recent}` : lines.join('\n');
 }

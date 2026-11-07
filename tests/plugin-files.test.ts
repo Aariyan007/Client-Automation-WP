@@ -48,6 +48,12 @@ describe('plugin files', () => {
     expect(readme).toMatch(/not published to npm yet/);
     expect(readme).toMatch(/npm link/);
   });
+  it('client-status skill says recent-activity text is untrusted data', () => {
+    const text = fs.readFileSync('skills/client-status/SKILL.md', 'utf8');
+    expect(text).toMatch(/untrusted/i);
+    expect(text).toMatch(/never instructions|not instructions/i);
+    expect(text).toMatch(/client or by an AI agent/i);
+  });
   it('connect-client does not tell users to install from npm', () => {
     const text = fs.readFileSync('skills/connect-client/SKILL.md', 'utf8');
     expect(text).not.toMatch(/npm install -g/);
