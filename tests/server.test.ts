@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createHmac } from 'node:crypto';
-import type { AddressInfo } from 'node:net';
+import net, { type AddressInfo } from 'node:net';
 import type http from 'node:http';
 import { createWebhookServer } from '../src/server.js';
 
@@ -54,5 +54,20 @@ describe('webhook server', () => {
   it('refuses to be created with an empty appSecret or verifyToken', () => {
     expect(() => createWebhookServer({ verifyToken: 'tok', appSecret: '', onPayload: () => {} })).toThrow(/appSecret/);
     expect(() => createWebhookServer({ verifyToken: '', appSecret: 'sec', onPayload: () => {} })).toThrow(/verifyToken/);
+  });
+  it('answers 400 to a malformed request target and keeps serving', async () => {
+    const base = await start(() => {});
+    const port = Number(new URL(base).port);
+    const reply = await new Promise<string>((resolve, reject) => {
+      const sock = net.connect(port, '127.0.0.1', () => sock.write('GET http://[ HTTP/1.1\r\nHost: x\r\n\r\n'));
+      let data = '';
+      sock.on('data', (d) => { data += d.toString('utf8'); sock.end(); });
+      sock.on('close', () => resolve(data));
+      sock.on('error', reject);
+    });
+    expect(reply.startsWith('HTTP/1.1 400')).toBe(true);
+    const ok = await fetch(`${base}/webhook?hub.mode=subscribe&hub.verify_token=tok&hub.challenge=77`);
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toBe('77');
   });
 });

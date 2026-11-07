@@ -108,4 +108,28 @@ describe('listener', () => {
     expect(runner.calls).toHaveLength(0);
     expect(fs.existsSync(dir)).toBe(false);
   });
+
+  it('one failing message does not stop the rest of the same payload', async () => {
+    const { dir, remote, runner } = setup();
+    const second = makeRepo();
+    const NUMBER2 = '15551234567';
+    connectProject(second.dir, `+${NUMBER2}`);
+    // Make the first project's state.json a directory so StateStore.markSeen throws on write.
+    fs.mkdirSync(path.join(dir, '.client-auto', 'state.json'));
+    const msg = (from: string, id: string, body: string) =>
+      ({ from, id, timestamp: '1', type: 'text', text: { body } });
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ field: 'messages', value: { messages: [
+        msg(NUMBER, 'f1', 'change the heading'),
+        msg(NUMBER2, 's1', 'change the heading'),
+      ] } }] }],
+    };
+    expect(() => listener.handlePayload(payload)).not.toThrow();
+    await listener.flushNow();
+    expect(runner.calls.filter((c) => c.model === 'haiku')).toHaveLength(1);
+    expect(remoteSubject(second.remote)).toBe('client-auto: change heading to Welcome');
+    expect(fs.readFileSync(logFile(dir), 'utf8')).toContain('**error**');
+    expect(remoteSubject(remote)).toBe('init');
+  });
 });

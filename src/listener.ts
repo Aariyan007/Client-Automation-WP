@@ -52,14 +52,23 @@ export function createListener(deps: ListenerDeps) {
   return {
     handlePayload(payload: unknown): void {
       for (const msg of parseWebhook(payload)) {
-        const r = route(msg, deps.loadRegistry());
-        if (r.kind === 'drop') continue;
-        if (!fs.existsSync(r.folder)) continue;
-        const state = new StateStore(r.folder);
-        if (state.hasSeen(msg.id)) continue;
-        state.markSeen(msg.id);
-        if (r.kind === 'unsupported') { appendLog(r.folder, 'unsupported', `message type: ${r.type}`); continue; }
-        batcher.push(r.folder, r.text);
+        let folder: string | undefined;
+        try {
+          const r = route(msg, deps.loadRegistry());
+          if (r.kind === 'drop') continue;
+          folder = r.folder;
+          if (!fs.existsSync(r.folder)) continue;
+          const state = new StateStore(r.folder);
+          if (state.hasSeen(msg.id)) continue;
+          state.markSeen(msg.id);
+          if (r.kind === 'unsupported') { appendLog(r.folder, 'unsupported', `message type: ${r.type}`); continue; }
+          batcher.push(r.folder, r.text);
+        } catch (e) {
+          // One bad message must not abort the rest of the payload.
+          if (folder) {
+            try { appendLog(folder, 'error', String(e).slice(0, 300)); } catch { /* folder gone */ }
+          }
+        }
       }
     },
     async flushNow(): Promise<void> {

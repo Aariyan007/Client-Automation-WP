@@ -11,8 +11,16 @@ const MAX_BODY = 1_000_000;
 export function createWebhookServer(opts: ServerOptions): http.Server {
   if (!opts.appSecret) throw new Error('appSecret must not be empty (an empty HMAC key makes signatures forgeable)');
   if (!opts.verifyToken) throw new Error('verifyToken must not be empty');
-  return http.createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+  const fail = (res: http.ServerResponse, status: number): void => {
+    try {
+      if (!res.headersSent) res.writeHead(status);
+      res.end();
+    } catch { /* socket already gone */ }
+  };
+
+  const handle = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+    let url: URL;
+    try { url = new URL(req.url ?? '/', 'http://localhost'); } catch { fail(res, 400); return; }
     if (url.pathname !== '/webhook') { res.writeHead(404).end(); return; }
 
     if (req.method === 'GET') {
@@ -44,15 +52,21 @@ export function createWebhookServer(opts: ServerOptions): http.Server {
     });
     req.on('end', () => {
       if (rejected) return;
-      const raw = Buffer.concat(chunks);
-      if (!verifySignature(raw, req.headers['x-hub-signature-256'] as string | undefined, opts.appSecret)) {
-        res.writeHead(401).end();
-        return;
-      }
-      let payload: unknown;
-      try { payload = JSON.parse(raw.toString('utf8')); } catch { res.writeHead(400).end(); return; }
-      try { opts.onPayload(payload); } catch { /* never fail the webhook; Meta would retry */ }
-      res.writeHead(200).end();
+      try {
+        const raw = Buffer.concat(chunks);
+        if (!verifySignature(raw, req.headers['x-hub-signature-256'] as string | undefined, opts.appSecret)) {
+          res.writeHead(401).end();
+          return;
+        }
+        let payload: unknown;
+        try { payload = JSON.parse(raw.toString('utf8')); } catch { res.writeHead(400).end(); return; }
+        try { opts.onPayload(payload); } catch { /* never fail the webhook; Meta would retry */ }
+        res.writeHead(200).end();
+      } catch { fail(res, 500); }
     });
+  };
+
+  return http.createServer((req, res) => {
+    try { handle(req, res); } catch { fail(res, 500); }
   });
 }
