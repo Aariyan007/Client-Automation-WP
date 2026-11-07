@@ -4,7 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { main } from '../src/cli.js';
 import { loadProjectConfig, loadCredentials, saveCredentials } from '../src/config.js';
-import { credentialsFile } from '../src/paths.js';
+import { credentialsFile, registryFile, logFile } from '../src/paths.js';
 import { makeRepo, withHome, git } from './helpers.js';
 
 beforeEach(() => { withHome(); });
@@ -24,6 +24,29 @@ describe('cli main', () => {
   });
   it('rejects unknown commands with usage text', async () => {
     await expect(main(['bogus'])).rejects.toThrow(/usage/i);
+  });
+  it('usage text lists every setup flag including --force', async () => {
+    const err = await main(['bogus']).catch((e) => String(e.message));
+    expect(err).toMatch(/setup .*--port/);
+    expect(err).toMatch(/setup .*--force/);
+  });
+  it('disconnect of a folder that is not connected says so and deletes nothing, even with --wipe', async () => {
+    const { dir } = makeRepo();
+    fs.mkdirSync(path.join(dir, '.client-auto'));
+    fs.writeFileSync(logFile(dir), '- old log\n');
+    saveCredentials({ verifyToken: 'v', appSecret: 's', port: 8787 });
+    expect(await main(['disconnect', dir, '--wipe'])).toBe(`${path.resolve(dir)} is not connected to a client.`);
+    expect(fs.existsSync(logFile(dir))).toBe(true);
+    expect(loadCredentials()).not.toBeNull();
+  });
+  it('connect and start surface a corrupt projects.json instead of overwriting it', async () => {
+    const { dir } = makeRepo();
+    fs.mkdirSync(path.dirname(registryFile()), { recursive: true });
+    fs.writeFileSync(registryFile(), '{ broken');
+    await expect(main(['connect', dir, '+919876543210'])).rejects.toThrow(/projects\.json is corrupt/);
+    expect(fs.readFileSync(registryFile(), 'utf8')).toBe('{ broken');
+    saveCredentials({ verifyToken: 'v', appSecret: 's', port: 9 });
+    await expect(main(['start'])).rejects.toThrow(/projects\.json is corrupt/);
   });
   it('importing main does not start anything (no output, no credentials, process alive)', () => {
     expect(typeof main).toBe('function');

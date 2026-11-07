@@ -33,7 +33,18 @@ function writeJson(file: string, data: unknown, mode = 0o644): void {
   fs.chmodSync(file, mode);
 }
 
-export const loadRegistry = (): Registry => readJson<Registry>(registryFile()) ?? {};
+export function loadRegistry(): Registry {
+  let raw: string;
+  try { raw = fs.readFileSync(registryFile(), 'utf8'); } catch (e: any) {
+    if (e?.code === 'ENOENT') return {};
+    throw new Error(`projects.json is corrupt; fix or delete it (${registryFile()}): ${e.message}`);
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Registry;
+  } catch { /* fall through */ }
+  throw new Error(`projects.json is corrupt; fix or delete it (${registryFile()})`);
+}
 export function saveRegistry(r: Registry): void {
   fs.mkdirSync(homeDir(), { recursive: true, mode: 0o700 });
   writeJson(registryFile(), r, 0o600);

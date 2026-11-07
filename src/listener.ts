@@ -72,6 +72,9 @@ export function createListener(deps: ListenerDeps) {
           // One bad message must not abort the rest of the payload.
           if (folder) {
             try { appendLog(folder, 'error', String(e).slice(0, 300)); } catch { /* folder gone */ }
+          } else {
+            // No project to log into (e.g. a corrupt projects.json): the owner must see this somewhere.
+            console.error(`client-auto: dropped a message: ${e instanceof Error ? e.message : String(e)}`.slice(0, 400));
           }
         }
       }

@@ -13,7 +13,7 @@ import { createWebhookServer } from './server.js';
 import { notify } from './notify.js';
 
 const USAGE = `usage:
-  client-auto setup [--port 8787]
+  client-auto setup [--port 8787] [--force]
   client-auto start
   client-auto connect <folder> <number> [--branch NAME] [--dry-run]
   client-auto status <folder>
@@ -77,6 +77,7 @@ export async function main(argv: string[]): Promise<string> {
     case 'start': {
       const creds = loadCredentials();
       if (!creds) throw new Error('Run "client-auto setup" first.');
+      loadRegistry(); // fail fast on a corrupt projects.json instead of dropping every client message later
       const listener = createListener({ runner: new CliClaudeRunner(), notify, quietMs: 30_000, loadRegistry });
       const server = createWebhookServer({ verifyToken: creds.verifyToken, appSecret: creds.appSecret, onPayload: listener.handlePayload });
       await new Promise<void>((resolve, reject) => {
@@ -110,6 +111,7 @@ export async function main(argv: string[]): Promise<string> {
     case 'disconnect': {
       if (!pos[0]) throw new Error(USAGE);
       const r = disconnectProject(pos[0], { deleteLog: flags['delete-log'] === true, wipe: flags.wipe === true });
+      if (!r.connected) return `${path.resolve(pos[0])} is not connected to a client.`;
       return `Disconnected.${r.credentialsDeleted ? ' Saved credentials deleted.' : ''}`;
     }
     case 'undo': {

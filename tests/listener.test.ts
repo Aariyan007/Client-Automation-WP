@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -203,5 +203,17 @@ describe('listener', () => {
     expect(log).toContain('**ignored-unclear**');
     expect(log).not.toContain('**error**');
     expect(notes).toHaveLength(0);
+  });
+
+  it('a corrupt projects.json does not throw out of handlePayload and is reported on stderr', async () => {
+    const { runner } = setup();
+    fs.writeFileSync(path.join(process.env.CLIENT_AUTO_HOME!, 'projects.json'), '{ broken');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => listener.handlePayload(waPayload(NUMBER, 'k1', 'change the heading'))).not.toThrow();
+      await listener.flushNow();
+      expect(spy).toHaveBeenCalledWith(expect.stringMatching(/projects\.json is corrupt/));
+    } finally { spy.mockRestore(); }
+    expect(runner.calls).toHaveLength(0);
   });
 });

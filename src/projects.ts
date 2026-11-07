@@ -54,9 +54,11 @@ export function setPaused(folder: string, paused: boolean): void {
 
 export function disconnectProject(
   folder: string, opts: { deleteLog: boolean; wipe: boolean },
-): { credentialsDeleted: boolean } {
+): { credentialsDeleted: boolean; connected: boolean } {
   const abs = path.resolve(folder);
   const registry = loadRegistry();
+  const inRegistry = Object.values(registry).includes(abs);
+  if (!inRegistry && !loadProjectConfig(abs)) return { credentialsDeleted: false, connected: false };
   for (const [n, f] of Object.entries(registry)) if (f === abs) delete registry[n];
   saveRegistry(registry);
   fs.rmSync(configFile(abs), { force: true });
@@ -71,7 +73,7 @@ export function disconnectProject(
     fs.rmSync(credentialsFile(), { force: true });
     credentialsDeleted = true;
   }
-  return { credentialsDeleted };
+  return { credentialsDeleted, connected: true };
 }
 
 export function statusText(folder: string): string {

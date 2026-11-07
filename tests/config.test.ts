@@ -4,7 +4,7 @@ import {
   normalizeNumber, defaultConfig, loadRegistry, saveRegistry,
   loadCredentials, saveCredentials, loadProjectConfig, saveProjectConfig,
 } from '../src/config.js';
-import { credentialsFile } from '../src/paths.js';
+import { credentialsFile, registryFile } from '../src/paths.js';
 import { tmp, withHome } from './helpers.js';
 
 beforeEach(() => { withHome(); });
@@ -25,6 +25,16 @@ describe('storage', () => {
     expect(loadRegistry()).toEqual({});
     saveRegistry({ '919876543210': '/tmp/site' });
     expect(loadRegistry()).toEqual({ '919876543210': '/tmp/site' });
+  });
+  it('throws a clear error for a corrupt projects.json and leaves the file alone', () => {
+    saveRegistry({ '919876543210': '/tmp/site' });
+    fs.writeFileSync(registryFile(), '{ "919876543210": "/tmp/si');
+    expect(() => loadRegistry()).toThrow(/projects\.json is corrupt; fix or delete it/);
+    expect(fs.readFileSync(registryFile(), 'utf8')).toBe('{ "919876543210": "/tmp/si');
+    fs.writeFileSync(registryFile(), '[]');
+    expect(() => loadRegistry()).toThrow(/corrupt/);
+    fs.writeFileSync(registryFile(), 'null');
+    expect(() => loadRegistry()).toThrow(/corrupt/);
   });
   it('saves credentials with mode 0600', () => {
     expect(loadCredentials()).toBeNull();

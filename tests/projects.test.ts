@@ -65,6 +65,15 @@ describe('pause / disconnect', () => {
     expect(loadProjectConfig(dir)).toBeNull();
     expect(fs.existsSync(logFile(dir))).toBe(true);
   });
+  it('disconnect of an unconnected folder reports it and deletes nothing', () => {
+    const { dir } = makeRepo();
+    appendLog(dir, 'pushed', 'x');
+    saveCredentials({ verifyToken: 'v', appSecret: 's', port: 8787 });
+    const r = disconnectProject(dir, { deleteLog: true, wipe: true });
+    expect(r).toEqual({ credentialsDeleted: false, connected: false });
+    expect(fs.existsSync(logFile(dir))).toBe(true);
+    expect(loadCredentials()).not.toBeNull();
+  });
   it('--delete-log removes log and state', () => {
     const { dir } = makeRepo();
     connectProject(dir, '919876543210');
