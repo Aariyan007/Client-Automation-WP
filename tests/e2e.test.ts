@@ -8,7 +8,7 @@ import { createWebhookServer } from '../src/server.js';
 import { createListener } from '../src/listener.js';
 import { connectProject } from '../src/projects.js';
 import { loadRegistry } from '../src/config.js';
-import { logFile } from '../src/paths.js';
+import { logFile, stateFile } from '../src/paths.js';
 import { FakeRunner, makeRepo, remoteSubject, remoteHead, waPayload, withHome, git } from './helpers.js';
 
 let server: http.Server;
@@ -47,24 +47,45 @@ describe('end to end', () => {
     expect((await post(waPayload('919876543210', 'c1', 'thanks!'))).status).toBe(200);
     await listener.flushNow();
     expect(remoteHead(remote)).toBe(head);
+    const classifierCalls = () => runner.calls.filter((c) => c.model === 'haiku').length;
+    expect(classifierCalls()).toBeGreaterThan(0); // the chit-chat was actually classified
 
     // 2. real change request: pushed once, even if Meta delivers it twice
     label = 'change_request';
     const change = waPayload('919876543210', 'c2', 'please make the heading say Plumeria');
+    const before = runner.calls.length;
     await post(change);
     await post(change);
     await listener.flushNow();
     expect(remoteSubject(remote)).toBe('client-auto: make heading say Plumeria');
     expect(git(dir, 'rev-list', '--count', 'HEAD')).toBe('2');
+    // exactly one classifier run and one worker run; the text appears once in each prompt (dedupe, not batching luck)
+    const newCalls = runner.calls.slice(before);
+    const newClassifier = newCalls.filter((c) => c.model === 'haiku');
+    const newWorker = newCalls.filter((c) => c.model !== 'haiku');
+    expect(newClassifier.length).toBe(1);
+    expect(newWorker.length).toBe(1);
+    const needle = 'please make the heading say Plumeria';
+    expect(newClassifier[0].prompt.split(needle).length - 1).toBe(1);
+    expect(newWorker[0].prompt.split(needle).length - 1).toBe(1);
 
-    // 3. a stranger's message never reaches Claude
+    // 3. a stranger's message never reaches Claude and leaves no trace in the project state
     const calls = runner.calls.length;
     await post(waPayload('15550001111', 's1', 'change the site'));
     await listener.flushNow();
     expect(runner.calls.length).toBe(calls);
+    for (const f of [logFile(dir), stateFile(dir)]) {
+      if (fs.existsSync(f)) {
+        const text = fs.readFileSync(f, 'utf8');
+        expect(text).not.toContain('"s1"');
+        expect(text).not.toContain('change the site');
+      }
+    }
 
-    // 4. nothing from .client-auto was pushed
-    expect(git(remote, 'ls-tree', '-r', '--name-only', 'main')).not.toContain('.client-auto');
+    // 4. nothing from .client-auto was pushed, and the project file was
+    const tree = git(remote, 'ls-tree', '-r', '--name-only', 'main');
+    expect(tree).toContain('index.html');
+    expect(tree).not.toContain('.client-auto');
 
     // 5. status-only webhook and an image from the bound number: 200, nothing pushed, logged as unsupported
     const headAfterChange = remoteHead(remote);
