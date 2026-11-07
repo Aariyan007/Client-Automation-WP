@@ -43,6 +43,10 @@ describe('git helpers', () => {
     expect(remoteSubject(remote)).toBe('client-auto: a');
   });
 
+  it('ensureBranch rejects a branch starting with a dash', async () => {
+    const { dir } = makeRepo();
+    await expect(ensureBranch(dir, '-f')).rejects.toThrow(/invalid branch/i);
+  });
   it('ensureBranch creates and reuses a branch; null leaves HEAD alone', async () => {
     const { dir } = makeRepo();
     await ensureBranch(dir, null);

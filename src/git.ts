@@ -23,6 +23,7 @@ export async function isClean(cwd: string): Promise<boolean> {
 
 export async function ensureBranch(cwd: string, branch: string | null): Promise<void> {
   if (!branch) return;
+  if (branch.startsWith('-')) throw new Error(`invalid branch name ${JSON.stringify(branch)}`);
   const current = (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
   if (current === branch) return;
   try { await git(cwd, ['checkout', branch]); } catch { await git(cwd, ['checkout', '-b', branch]); }

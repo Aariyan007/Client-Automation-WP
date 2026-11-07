@@ -33,6 +33,20 @@ describe('connectProject', () => {
   });
 });
 
+describe('connectProject branch validation', () => {
+  it.each(['-f', '--dry-run', 'a..b', ''])('rejects branch %j', (b) => {
+    const { dir } = makeRepo();
+    expect(() => connectProject(dir, '919876543210', { branch: b })).toThrow(/invalid branch/i);
+    expect(loadProjectConfig(dir)).toBeNull();
+  });
+  it('accepts a normal branch name and still allows no branch', () => {
+    const { dir } = makeRepo();
+    expect(connectProject(dir, '919876543210', { branch: 'client-changes' }).branch).toBe('client-changes');
+    expect(connectProject(dir, '919876543210', { branch: null }).branch).toBeNull();
+    expect(connectProject(dir, '919876543210').branch).toBeNull();
+  });
+});
+
 describe('pause / disconnect', () => {
   it('pause and resume flip the flag', () => {
     const { dir } = makeRepo();

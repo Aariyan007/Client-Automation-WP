@@ -17,12 +17,21 @@ export function ensureExcluded(folder: string): void {
   }
 }
 
+function assertValidBranch(folder: string, branch: string): void {
+  const bad = (): never => { throw new Error(`invalid branch name ${JSON.stringify(branch)}`); };
+  if (!branch || branch.startsWith('-') || branch.includes('@{')) bad();
+  try {
+    execFileSync('git', ['check-ref-format', '--branch', branch], { cwd: folder, stdio: 'ignore' });
+  } catch { bad(); }
+}
+
 export function connectProject(
   folder: string, rawNumber: string, opts: { branch?: string | null; dryRun?: boolean } = {},
 ): ProjectConfig {
   const abs = path.resolve(folder);
   if (!fs.existsSync(path.join(abs, '.git'))) throw new Error(`${abs} is not a git repository`);
   const number = normalizeNumber(rawNumber);
+  if (opts.branch !== undefined && opts.branch !== null) assertValidBranch(abs, opts.branch);
   const registry = loadRegistry();
   if (registry[number] && registry[number] !== abs) {
     throw new Error(`${number} is already connected to ${registry[number]}. Disconnect it there first.`);

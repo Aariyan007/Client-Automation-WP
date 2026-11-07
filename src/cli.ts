@@ -23,6 +23,17 @@ const USAGE = `usage:
 
 const VALUED = new Set(['branch', 'port']);
 
+const ALLOWED: Record<string, string[]> = {
+  setup: ['port', 'force'],
+  start: [],
+  connect: ['branch', 'dry-run'],
+  status: [],
+  pause: [],
+  resume: [],
+  disconnect: ['delete-log', 'wipe'],
+  undo: ['push'],
+};
+
 function parseArgs(argv: string[]) {
   const pos: string[] = [];
   const flags: Record<string, string | true> = {};
@@ -30,7 +41,12 @@ function parseArgs(argv: string[]) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
-      flags[k] = VALUED.has(k) ? (argv[++i] ?? '') : true;
+      if (VALUED.has(k)) {
+        const v = argv[i + 1];
+        if (v === undefined || v.startsWith('--')) throw new Error(`--${k} needs a value`);
+        flags[k] = v;
+        i++;
+      } else flags[k] = true;
     } else pos.push(a);
   }
   return { pos, flags };
@@ -39,8 +55,17 @@ function parseArgs(argv: string[]) {
 export async function main(argv: string[]): Promise<string> {
   const [cmd, ...rest] = argv;
   const { pos, flags } = parseArgs(rest);
+  const allowed = ALLOWED[cmd];
+  if (allowed) {
+    for (const k of Object.keys(flags)) {
+      if (!allowed.includes(k)) throw new Error(`unknown option --${k} for ${cmd}`);
+    }
+  }
   switch (cmd) {
     case 'setup': {
+      if (loadCredentials() && flags.force !== true) {
+        throw new Error('already set up; re-run with --force to replace the credentials. This changes the verify token and you must update it in Meta.');
+      }
       const secret = (process.env.CLIENT_AUTO_APP_SECRET ?? (await prompt('Meta app secret: '))).trim();
       if (!secret) throw new Error('app secret is required (it must not be empty)');
       const port = Number(flags.port ?? 8787);
@@ -54,14 +79,22 @@ export async function main(argv: string[]): Promise<string> {
       if (!creds) throw new Error('Run "client-auto setup" first.');
       const listener = createListener({ runner: new CliClaudeRunner(), notify, quietMs: 30_000, loadRegistry });
       const server = createWebhookServer({ verifyToken: creds.verifyToken, appSecret: creds.appSecret, onPayload: listener.handlePayload });
-      await new Promise<void>((r) => server.listen(creds.port, '127.0.0.1', r));
+      await new Promise<void>((resolve, reject) => {
+        const onError = (e: Error) => {
+          listener.dispose();
+          reject(new Error(`cannot listen on 127.0.0.1:${creds.port}: ${e.message}`));
+        };
+        server.once('error', onError);
+        server.listen(creds.port, '127.0.0.1', () => { server.off('error', onError); resolve(); });
+      });
+      server.on('error', (e) => console.error(`client-auto server error: ${e.message}`));
       return `client-auto listening on http://127.0.0.1:${creds.port}/webhook (Ctrl+C to stop)`;
     }
     case 'connect': {
       const [folder, number] = pos;
       if (!folder || !number) throw new Error(USAGE);
       const cfg = connectProject(folder, number, {
-        branch: typeof flags.branch === 'string' && flags.branch ? flags.branch : null,
+        branch: typeof flags.branch === 'string' ? flags.branch : null,
         dryRun: flags['dry-run'] === true,
       });
       return `Connected ${path.resolve(folder)} to client number ${cfg.number}.`;
