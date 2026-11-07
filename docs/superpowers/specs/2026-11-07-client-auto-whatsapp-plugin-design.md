@@ -82,13 +82,13 @@ the failure is logged and the user is notified.
 ## 5. Data and privacy
 - All data stays on the user's machine. No telemetry.
 - Messages from non-bound numbers are dropped without being written anywhere.
-- Cloud API token and app secret are stored locally with restrictive file permissions.
+- Webhook verify token and app secret are stored locally with restrictive file permissions. No access token is stored because v1 never sends messages.
 
 ## 6. Disconnect (`/disconnect-client`)
 1. **Pause:** stop acting on messages, keep the binding. `/resume-client` re-enables.
 2. **Disconnect:** remove the number from the project and stop accepting its messages.
    The user chooses to keep or delete that project's log.
-3. **Full wipe:** also delete the saved token and the project's `.client-auto` folder.
+3. **Full wipe:** also delete the project's `.client-auto` folder, and delete saved credentials if no other project remains bound.
 
 ## 7. Requirements for users
 - Node 20+, Claude Code signed in, push access to the project's git remote.
@@ -116,3 +116,5 @@ Windows, hosted relay, unofficial (Baileys) adapter.
 3. Whether a stable Cloudflare Tunnel URL needs a user-owned domain, and the simplest setup path.
 4. Read the existing `claude-channel-whatsapp` project on GitHub for overlap and lessons.
 5. Meta webhook retry window, to document the downtime risk accurately.
+
+Results: see docs/verification-notes.md

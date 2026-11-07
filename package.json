@@ -1,0 +1,21 @@
+{
+  "name": "client-auto",
+  "version": "0.1.0",
+  "description": "Bind a project to a client's WhatsApp number. Claude fixes their change requests and pushes to GitHub.",
+  "type": "module",
+  "bin": { "client-auto": "dist/cli.js" },
+  "files": ["dist", "skills", ".claude-plugin", "README.md", "LICENSE", "docs/setup.md"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "tsx src/cli.ts"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
