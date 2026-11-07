@@ -132,4 +132,32 @@ describe('listener', () => {
     expect(fs.readFileSync(logFile(dir), 'utf8')).toContain('**error**');
     expect(remoteSubject(remote)).toBe('init');
   });
+
+  it('a slow classifier does not make the listener forget ids seen meanwhile (no double processing)', async () => {
+    withHome();
+    const { dir } = makeRepo();
+    connectProject(dir, `+${NUMBER}`);
+    const runner = new FakeRunner(async (o) => {
+      if (o.model === 'haiku') {
+        await new Promise((r) => setTimeout(r, 150));
+        return { ok: true, text: verdict };
+      }
+      fs.writeFileSync(path.join(o.cwd, 'index.html'), `<h1>${o.prompt.length}</h1>\n`);
+      return { ok: true, text: 'done' };
+    });
+    listener = createListener({ runner, notify: () => {}, quietMs: 60_000, loadRegistry });
+    listener.handlePayload(waPayload(NUMBER, 'slow1', 'first request'));
+    const first = listener.flushNow(); // classifier for slow1 is now in flight
+    await new Promise((r) => setTimeout(r, 30));
+    const second = waPayload(NUMBER, 'slow2', 'second request marker');
+    listener.handlePayload(second); // marks slow2 seen while the first batch still holds a stale snapshot
+    await first; // first batch finishes and writes its history
+    listener.handlePayload(second); // Meta redelivers slow2
+    await listener.flushNow();
+    const haiku = runner.calls.filter((c) => c.model === 'haiku');
+    const mentions = haiku.reduce((n, c) => n + c.prompt.split('second request marker').length - 1, 0);
+    expect(mentions).toBe(1);
+    expect(haiku).toHaveLength(2);
+    expect(runner.calls.filter((c) => c.model !== 'haiku')).toHaveLength(2);
+  });
 });
