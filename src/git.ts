@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const exec = promisify(execFile);
 const EXCLUDE = ':(exclude).client-auto';
@@ -19,6 +21,53 @@ async function git(cwd: string, args: string[]): Promise<string> {
 
 export async function isClean(cwd: string): Promise<boolean> {
   return (await git(cwd, ['status', '--porcelain', '--', '.', EXCLUDE])).trim() === '';
+}
+
+/** Paths with uncommitted changes (including untracked files and both sides of a rename), excluding .client-auto. */
+export async function changedPaths(cwd: string): Promise<string[]> {
+  const out = await git(cwd, ['status', '--porcelain', '-z', '-uall', '--', '.', EXCLUDE]);
+  const parts = out.split('\0');
+  const paths: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    if (entry.length < 4) continue;
+    paths.push(entry.slice(3));
+    // Renames and copies are followed by an extra NUL-separated entry holding the original path.
+    if (entry[0] === 'R' || entry[0] === 'C' || entry[1] === 'R' || entry[1] === 'C') {
+      i++;
+      if (parts[i]) paths.push(parts[i]);
+    }
+  }
+  return [...new Set(paths)];
+}
+
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, val) =>
+  val && typeof val === 'object' && !Array.isArray(val)
+    ? Object.fromEntries(Object.entries(val as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    : val);
+
+/**
+ * True when package.json's `scripts` field differs from HEAD's (a missing file or missing field counts as empty).
+ * Anything unparseable counts as different.
+ */
+export async function scriptsChanged(cwd: string): Promise<boolean> {
+  const scriptsOf = (raw: string): unknown => {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && 'scripts' in parsed ? parsed.scripts ?? {} : {};
+  };
+  let current: unknown = {};
+  try {
+    current = scriptsOf(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+  } catch (e: any) {
+    if (e?.code !== 'ENOENT') return true;
+  }
+  let head: unknown = {};
+  let headRaw: string | null = null;
+  try { headRaw = await git(cwd, ['show', 'HEAD:package.json']); } catch { /* no package.json at HEAD */ }
+  if (headRaw !== null) {
+    try { head = scriptsOf(headRaw); } catch { return true; }
+  }
+  return canonical(current) !== canonical(head);
 }
 
 export async function ensureBranch(cwd: string, branch: string | null): Promise<void> {

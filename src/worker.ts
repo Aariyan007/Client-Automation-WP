@@ -2,7 +2,7 @@ import type { ClaudeRunner } from './claude.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { ProjectConfig } from './config.js';
 import { checkRequest } from './guard.js';
-import { isClean, ensureBranch, discardChanges, commitAll, push } from './git.js';
+import { isClean, ensureBranch, discardChanges, commitAll, push, changedPaths, scriptsChanged } from './git.js';
 import { runChecks } from './checks.js';
 import { appendLog } from './log.js';
 import { sanitizeClientText } from './text.js';
@@ -18,7 +18,7 @@ export type JobOutcome =
 
 export const WORKER_ALLOWED_TOOLS = [
   'Read', 'Edit', 'Write', 'Glob', 'Grep',
-  'Bash(npm install:*)', 'Bash(npm run build:*)', 'Bash(npm run lint:*)', 'Bash(npm test:*)',
+  'Bash(npm install --ignore-scripts:*)', 'Bash(npm run build:*)', 'Bash(npm run lint:*)', 'Bash(npm test:*)',
   'Bash(ls:*)', 'Bash(git status:*)',
 ];
 export const WORKER_DISALLOWED_TOOLS = [
@@ -26,6 +26,8 @@ export const WORKER_DISALLOWED_TOOLS = [
   'Edit(./.env*)', 'Edit(./**/.env*)',
   'Write(./.env*)', 'Write(./**/.env*)',
   'Edit(./.git/**)', 'Write(./.git/**)',
+  'Edit(./.github/**)', 'Write(./.github/**)', 'Edit(./.husky/**)', 'Write(./.husky/**)',
+  'Edit(./.npmrc)', 'Write(./.npmrc)', 'Edit(./**/.npmrc)', 'Write(./**/.npmrc)',
   'Bash(git push:*)', 'Bash(git reset:*)', 'Bash(git clean:*)', 'Bash(git diff:*)',
   'Bash(curl:*)', 'Bash(wget:*)',
   'Bash(npm publish:*)', 'Bash(npm exec:*)', 'Bash(npm run deploy:*)', 'Bash(npx:*)',
@@ -44,6 +46,18 @@ export function buildWorkerPrompt(task: string, messages: string[]): string {
     '',
     'When finished, reply with one short sentence describing what you changed.',
   ].join('\n');
+}
+
+// Files that run code on the owner's machine or in CI without being part of the website itself.
+const isProtectedPath = (p: string): boolean => {
+  const l = p.toLowerCase();
+  return l.startsWith('.github/') || l.startsWith('.husky/') || l === '.npmrc' || l.endsWith('/.npmrc');
+};
+
+async function protectedChanges(folder: string): Promise<string[]> {
+  const hits = (await changedPaths(folder)).filter(isProtectedPath);
+  if (await scriptsChanged(folder)) hits.push('package.json (scripts)');
+  return hits;
 }
 
 const CONTROL = /[\u0000-\u001f\u007f]/g;
@@ -100,6 +114,14 @@ export async function runJob(
       appendLog(folder, 'nothing-changed', run.text.slice(0, 300), messages);
       await say('Client request changed nothing', shortTask);
       return 'nothing-changed';
+    }
+    const blocked = await protectedChanges(folder);
+    if (blocked.length > 0) {
+      await discardChanges(folder);
+      const names = blocked.slice(0, 5).join(', ') + (blocked.length > 5 ? ` (+${blocked.length - 5} more)` : '');
+      appendLog(folder, 'refused', `protected path changed: ${names}`, messages);
+      await say('Client change refused', `The agent changed protected files (${names}); nothing was pushed.`);
+      return 'refused';
     }
     const checks = await runChecks(folder);
     if (!checks.ok) {

