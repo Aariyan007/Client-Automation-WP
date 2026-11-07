@@ -10,17 +10,22 @@ Bind a project to a client's WhatsApp number. When the client texts a website ch
 5. Claude edits the project, your build/lint/tests run, then one commit tagged `client-auto:` is pushed.
 
 ## Privacy and safety
-- Official WhatsApp Business Cloud API only. No unofficial libraries, no ban risk.
+- Official WhatsApp Business Cloud API only; no unofficial libraries or scraping.
 - The plugin only reads messages from the number you connect, and never replies to the client.
-- Everything stays on your machine. No telemetry.
+- The plugin has no telemetry and keeps all its own data on your machine. Client messages still pass through Meta and your Cloudflare Tunnel to reach you, and the text of a change request is sent to Anthropic by the `claude` CLI when Claude works on it.
 - Client text is treated as data, not commands. Requests for secrets, deletions, billing or domain changes are refused and logged.
 - Changes never run on top of your uncommitted work. If you have local edits, the job is skipped.
 - `/client-undo` reverts the last change. Nothing is ever force-pushed.
 - Pause, disconnect or fully wipe any time with `disconnect-client`.
 
 ## Install
+**client-auto is not published to npm yet.** Install it from source:
 ```bash
-npm install -g client-auto
+git clone https://github.com/Aariyan007/Client-Automation-WP.git
+cd Client-Automation-WP
+npm install
+npm run build
+npm link
 ```
 Then in Claude Code add this repository as a plugin marketplace and install `client-auto`. Follow [docs/setup.md](docs/setup.md) for the Meta app and Cloudflare Tunnel.
 

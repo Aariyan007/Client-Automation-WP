@@ -7,8 +7,10 @@
 
 ## 1. Meta (WhatsApp Business Cloud API)
 1. Create a Meta developer app with the WhatsApp product (developers.facebook.com).
-2. Add your dedicated phone number on the Cloud API. Meta's test number also works while building, but it only delivers to recipients you approve, and its temporary token expires after 24 hours. Use a permanent or system-user token for real use.
+2. Add your dedicated phone number on the Cloud API. Meta's test number also works while building, but it only delivers to recipients you approve, and its temporary token expires quickly (about 24 hours at last report; check Meta's current docs).
 3. Copy the **App secret** (App settings > Basic).
+
+Version 1 only receives messages. It needs no WhatsApp access token: only the app secret (step 2) and the verify token it prints.
 
 ## 2. Save credentials
 ```bash
@@ -37,6 +39,7 @@ ingress:
 ```bash
 cloudflared tunnel run client-auto
 ```
+If you ran `client-auto setup --port N`, change the `service: http://127.0.0.1:8787` line to that port.
 
 ## 4. Point Meta at it
 In the app: WhatsApp > Configuration > Webhook. Callback URL `https://hooks.yourdomain.com/webhook`, Verify token from step 2. Subscribe to the **messages** field.
