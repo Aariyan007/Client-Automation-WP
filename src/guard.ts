@@ -15,6 +15,7 @@ const RULES: { re: RegExp; reason: string }[] = [
 ];
 
 export function checkRequest(text: string): { allowed: true } | { allowed: false; reason: string } {
-  for (const rule of RULES) if (rule.re.test(text)) return { allowed: false, reason: rule.reason };
+  const t = text.replace(/\s+/g, ' ');
+  for (const rule of RULES) if (rule.re.test(t)) return { allowed: false, reason: rule.reason };
   return { allowed: true };
 }
