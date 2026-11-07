@@ -36,6 +36,11 @@ export function createListener(deps: ListenerDeps) {
     const state = new StateStore(folder);
     const verdict = await classify(deps.runner, classifierCwd, state.history(), texts);
     texts.forEach((t) => state.pushHistory(t));
+    if (verdict.error) {
+      appendLog(folder, 'error', `classifier failed: ${verdict.error}`, texts);
+      try { await deps.notify('Client-auto classifier failed', `Could not classify a client message: ${verdict.error.slice(0, 120)}`); } catch { /* best effort */ }
+      return;
+    }
     if (verdict.label !== 'change_request') {
       appendLog(folder, verdict.label === 'chat' ? 'ignored-chat' : 'ignored-unclear', verdict.task, texts);
       return;

@@ -52,6 +52,15 @@ describe('classify', () => {
     const r = new FakeRunner(() => ({ ok: false, text: 'x' }));
     expect((await classify(r, '/tmp', [], ['hi'])).label).toBe('unclear');
   });
+  it('carries the runner failure text in verdict.error, truncated, and none on success', async () => {
+    const bad = new FakeRunner(() => ({ ok: false, text: 'Failed to authenticate ' + 'x'.repeat(400) }));
+    const v = await classify(bad, '/tmp', [], ['hi']);
+    expect(v.label).toBe('unclear');
+    expect(v.error).toMatch(/^Failed to authenticate/);
+    expect(v.error!.length).toBe(300);
+    const ok = new FakeRunner(() => ({ ok: true, text: 'garbage' }));
+    expect((await classify(ok, '/tmp', [], ['hi'])).error).toBeUndefined();
+  });
 });
 
 describe('sanitizeClientText idempotence and variants', () => {

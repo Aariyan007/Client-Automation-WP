@@ -2,7 +2,7 @@ import type { ClaudeRunner } from './claude.js';
 import { sanitizeClientText } from './text.js';
 
 export type Label = 'change_request' | 'chat' | 'unclear';
-export interface Verdict { label: Label; task: string }
+export interface Verdict { label: Label; task: string; error?: string }
 export const CLASSIFIER_MODEL = 'haiku';
 const LABELS: Label[] = ['change_request', 'chat', 'unclear'];
 const CLASSIFIER_DISALLOWED_TOOLS = ['Bash', 'Edit', 'Write', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit'];
@@ -52,5 +52,5 @@ export async function classify(
     cwd, model: CLASSIFIER_MODEL, timeoutMs: 60_000,
     disallowedTools: CLASSIFIER_DISALLOWED_TOOLS,
   });
-  return r.ok ? parseVerdict(r.text) : { label: 'unclear', task: '' };
+  return r.ok ? parseVerdict(r.text) : { label: 'unclear', task: '', error: r.text.slice(0, 300) };
 }

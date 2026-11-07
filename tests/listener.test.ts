@@ -160,4 +160,48 @@ describe('listener', () => {
     expect(haiku).toHaveLength(2);
     expect(runner.calls.filter((c) => c.model !== 'haiku')).toHaveLength(2);
   });
+
+  it('a failing classifier is logged as an error and notified, not silently ignored', async () => {
+    withHome();
+    const { dir } = makeRepo();
+    connectProject(dir, `+${NUMBER}`);
+    const notes: string[] = [];
+    const runner = new FakeRunner(() => ({ ok: false, text: 'Failed to authenticate' }));
+    listener = createListener({ runner, notify: (t, b) => { notes.push(`${t}|${b}`); }, quietMs: 60_000, loadRegistry });
+    listener.handlePayload(waPayload(NUMBER, 'cf1', 'change the heading'));
+    await listener.flushNow();
+    const log = fs.readFileSync(logFile(dir), 'utf8');
+    expect(log).toContain('**error**');
+    expect(log).toContain('classifier failed: Failed to authenticate');
+    expect(log).not.toContain('ignored-unclear');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/Client-auto classifier failed/);
+    expect(runner.calls.filter((c) => c.model !== 'haiku')).toHaveLength(0);
+  });
+
+  it('a throwing notify never breaks the classifier-failure path', async () => {
+    withHome();
+    const { dir } = makeRepo();
+    connectProject(dir, `+${NUMBER}`);
+    const runner = new FakeRunner(() => ({ ok: false, text: 'boom' }));
+    listener = createListener({ runner, notify: () => { throw new Error('down'); }, quietMs: 60_000, loadRegistry });
+    listener.handlePayload(waPayload(NUMBER, 'cf2', 'change the heading'));
+    await listener.flushNow();
+    expect(fs.readFileSync(logFile(dir), 'utf8')).toContain('classifier failed: boom');
+  });
+
+  it('a normal unclear verdict still logs ignored-unclear and does not notify', async () => {
+    withHome();
+    const { dir } = makeRepo();
+    connectProject(dir, `+${NUMBER}`);
+    const notes: string[] = [];
+    const runner = new FakeRunner(() => ({ ok: true, text: '{"label":"unclear","task":""}' }));
+    listener = createListener({ runner, notify: (t, b) => { notes.push(`${t}|${b}`); }, quietMs: 60_000, loadRegistry });
+    listener.handlePayload(waPayload(NUMBER, 'cu1', 'make it nicer'));
+    await listener.flushNow();
+    const log = fs.readFileSync(logFile(dir), 'utf8');
+    expect(log).toContain('**ignored-unclear**');
+    expect(log).not.toContain('**error**');
+    expect(notes).toHaveLength(0);
+  });
 });
