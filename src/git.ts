@@ -3,6 +3,9 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const EXCLUDE = ':(exclude).client-auto';
+// `git add` errors when an exclude pathspec names a path that is itself git-ignored (as .client-auto/ is
+// once info/exclude is set up); a glob pathspec excludes the same files without that error.
+const EXCLUDE_ADD = ':(exclude,glob)**/.client-auto/**';
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await exec('git', args, {
@@ -32,7 +35,7 @@ export async function discardChanges(cwd: string): Promise<void> {
 }
 
 export async function commitAll(cwd: string, message: string): Promise<string | null> {
-  await git(cwd, ['add', '-A', '--', '.', EXCLUDE]);
+  await git(cwd, ['add', '-A', '--', '.', EXCLUDE_ADD]);
   try {
     await git(cwd, ['diff', '--cached', '--quiet']);
     return null;

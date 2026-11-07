@@ -25,6 +25,16 @@ describe('git helpers', () => {
     expect(git(dir, 'ls-files')).not.toContain('.client-auto');
   });
 
+  it('commitAll works when .client-auto/ is git-excluded (as after connect)', async () => {
+    const { dir } = makeRepo();
+    fs.appendFileSync(path.join(dir, '.git', 'info', 'exclude'), '.client-auto/\n');
+    fs.mkdirSync(path.join(dir, '.client-auto'));
+    fs.writeFileSync(path.join(dir, '.client-auto', 'log.md'), 'secret client text');
+    fs.writeFileSync(path.join(dir, 'new.html'), 'x');
+    expect(await commitAll(dir, 'client-auto: add page')).toMatch(/^[0-9a-f]{40}$/);
+    expect(git(dir, 'ls-files')).not.toContain('.client-auto');
+  });
+
   it('push sends the commit to the remote', async () => {
     const { dir, remote } = makeRepo();
     fs.writeFileSync(path.join(dir, 'a.txt'), 'a');
