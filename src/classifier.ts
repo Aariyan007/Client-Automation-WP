@@ -5,6 +5,7 @@ export type Label = 'change_request' | 'chat' | 'unclear';
 export interface Verdict { label: Label; task: string }
 export const CLASSIFIER_MODEL = 'haiku';
 const LABELS: Label[] = ['change_request', 'chat', 'unclear'];
+const CLASSIFIER_DISALLOWED_TOOLS = ['Bash', 'Edit', 'Write', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'NotebookEdit'];
 
 export function buildClassifierPrompt(history: string[], messages: string[]): string {
   const earlier = history.map(sanitizeClientText).join('\n');
@@ -49,6 +50,7 @@ export async function classify(
   const r = await runner.run({
     prompt: buildClassifierPrompt(history, messages),
     cwd, model: CLASSIFIER_MODEL, timeoutMs: 60_000,
+    disallowedTools: CLASSIFIER_DISALLOWED_TOOLS,
   });
   return r.ok ? parseVerdict(r.text) : { label: 'unclear', task: '' };
 }
