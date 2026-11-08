@@ -4,8 +4,19 @@ import os from 'node:os';
 import path from 'node:path';
 import type { ClaudeRunner, RunOptions, RunResult } from '../src/claude.js';
 
+const createdTmpDirs: string[] = [];
+
 export function tmp(prefix = 'ca-'): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  createdTmpDirs.push(dir);
+  return dir;
+}
+
+/** Removes every directory created through tmp() (and so makeRepo/withHome). Called from tests/setup.ts. */
+export function cleanupTmp(): void {
+  while (createdTmpDirs.length > 0) {
+    fs.rmSync(createdTmpDirs.pop() as string, { recursive: true, force: true });
+  }
 }
 
 export function git(cwd: string, ...args: string[]): string {
