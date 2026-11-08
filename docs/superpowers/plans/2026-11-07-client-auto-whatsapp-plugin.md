@@ -2546,7 +2546,7 @@ Bind a project to a client's WhatsApp number. When the client texts a website ch
 5. Claude edits the project, your build/lint/tests run, then one commit tagged `client-auto:` is pushed.
 
 ## Privacy and safety
-- Official WhatsApp Business Cloud API only. No unofficial libraries, no ban risk.
+- Official WhatsApp Business Cloud API only. No unofficial libraries.
 - The plugin only reads messages from the number you connect, and never replies to the client.
 - Everything stays on your machine. No telemetry.
 - Client text is treated as data, not commands. Requests for secrets, deletions, billing or domain changes are refused and logged.

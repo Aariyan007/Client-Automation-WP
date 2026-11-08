@@ -16,7 +16,7 @@ Messages that are not website requests are ignored. The plugin is released publi
 
 | Topic | Decision |
 |---|---|
-| WhatsApp connection | Official WhatsApp Business Cloud API (no unofficial libraries, no ban risk) |
+| WhatsApp connection | Official WhatsApp Business Cloud API (official API only, no unofficial libraries) |
 | Receiving messages | Meta webhook, exposed to the user's machine with Cloudflare Tunnel |
 | Replies to the client | None. The plugin is silent toward the client |
 | Output of a job | Commit and push to GitHub. The user deploys themselves |
@@ -63,8 +63,14 @@ Messages that are not website requests are ignored. The plugin is released publi
 
 ### 4.1 Permissions
 The worker may edit files inside the project folder and run git. It may not read `.env` or
-other secrets, run deploy commands, or touch anything outside the folder. Enforced through a
-generated permission/settings file for the headless run.
+other secrets, run deploy commands, or touch anything outside the folder. Enforced with the
+Claude CLI tool allow/deny flags passed on the headless run (not a generated settings file).
+This is a restricted tool list, not an operating-system sandbox. Installs run with `--ignore-scripts`.
+
+After the agent finishes and before checks run, the worker compares the changes with HEAD. If the
+agent touched `.github/`, `.husky/`, any `.npmrc`, or changed the `scripts` field of `package.json`,
+the changes are discarded, nothing is pushed, the refusal is logged as a protected path change and
+the user is notified.
 
 ### 4.2 Client text is data
 Messages are never executed as instructions beyond "make this website change". Requests such as
@@ -82,18 +88,18 @@ the failure is logged and the user is notified.
 ## 5. Data and privacy
 - All data stays on the user's machine. No telemetry.
 - Messages from non-bound numbers are dropped without being written anywhere.
-- Cloud API token and app secret are stored locally with restrictive file permissions.
+- Webhook verify token and app secret are stored locally with restrictive file permissions. No access token is stored because v1 never sends messages.
 
 ## 6. Disconnect (`/disconnect-client`)
 1. **Pause:** stop acting on messages, keep the binding. `/resume-client` re-enables.
 2. **Disconnect:** remove the number from the project and stop accepting its messages.
    The user chooses to keep or delete that project's log.
-3. **Full wipe:** also delete the saved token and the project's `.client-auto` folder.
+3. **Full wipe:** also delete the project's `.client-auto` folder, and delete saved credentials if no other project remains bound.
 
 ## 7. Requirements for users
 - Node 20+, Claude Code signed in, push access to the project's git remote.
-- A Meta developer app and a WhatsApp Business phone number on the Cloud API.
-- A Cloudflare account and a stable tunnel URL (see open items).
+- A Meta developer app and a dedicated phone number registered on the WhatsApp Cloud API (coexistence with the Business app is not assumed).
+- A Cloudflare account with a domain, so the tunnel has a stable hostname.
 - The computer must be on and the listener running. Meta retries failed webhooks for a limited
   time, so long downtime can lose messages.
 
@@ -116,3 +122,5 @@ Windows, hosted relay, unofficial (Baileys) adapter.
 3. Whether a stable Cloudflare Tunnel URL needs a user-owned domain, and the simplest setup path.
 4. Read the existing `claude-channel-whatsapp` project on GitHub for overlap and lessons.
 5. Meta webhook retry window, to document the downtime risk accurately.
+
+Results: see docs/verification-notes.md
